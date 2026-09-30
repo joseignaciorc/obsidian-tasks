@@ -86,10 +86,7 @@ For example, the task below has both the `#foobar` and the `#quux` tags, so it i
     - #quux
 ```
 
-- Tags in sub-items of sub-items are included too.
-- Tags in any **child tasks** - and in those tasks' sub-items - are **not** included in the parent task: they belong to the child task.
-- The tags in sub-items are only used by tag searches: they are not added to the task's description, and the task line is not modified.
-- In [[Custom Filters|custom filters]] and groups, `task.tags` contains only the tags on the task line, whilst `task.tagsIncludingSubItems` also contains the tags in sub-items.
+This applies to all task data, not just tags: see [[Getting Started#Adding data in sub-items]].
 
 ### Order of tags in task lines
 

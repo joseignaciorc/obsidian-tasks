@@ -159,33 +159,30 @@ export class ListItem {
     }
 
     /**
-     * Return any tags found in the descriptions of indented sub-items of this list item.
+     * Return all the indented sub-items of this list item or task, in the order they appear in the file.
      *
-     * Only sub-items that are not tasks are searched: the tags in any child {@link Task}
-     * (and in that task's own sub-items) belong to that child task instead.
+     * Only descendants that are not tasks are returned: any child {@link Task} - and that task's
+     * own sub-items - describe the child task, and so are not sub-items of this object.
      *
-     * Duplicate tags are only returned once.
+     * These are the sub-items whose content is treated as belonging to this list item or task.
+     * See {@link Task.subItemsDetails}.
      */
-    public get tagsInSubItems(): string[] {
-        const tags: string[] = [];
+    public get subItems(): ListItem[] {
+        const subItems: ListItem[] = [];
 
-        const addTagsInChildren = (listItem: ListItem) => {
+        const addChildren = (listItem: ListItem) => {
             for (const child of listItem.children) {
                 if (child.isTask) {
                     continue;
                 }
-                for (const tag of child.tagsInDescription) {
-                    if (!tags.includes(tag)) {
-                        tags.push(tag);
-                    }
-                }
-                addTagsInChildren(child);
+                subItems.push(child);
+                addChildren(child);
             }
         };
 
-        addTagsInChildren(this);
+        addChildren(this);
 
-        return tags;
+        return subItems;
     }
 
     /**

@@ -48,8 +48,8 @@ export class TagsField extends MultiTextField {
     }
 
     public values(task: Task): string[] {
-        // Tags in any indented sub-items of the task are included, see Task.tagsIncludingSubItems.
-        return task.tagsIncludingSubItems;
+        // Task.tags includes any tags in the task's indented sub-items.
+        return task.tags;
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -96,8 +96,8 @@ export class TagsField extends MultiTextField {
 
     private static makeCompareByTagComparator(propertyInstance: number): Comparator {
         return (a: Task, b: Task) => {
-            const aTags = a.tagsIncludingSubItems;
-            const bTags = b.tagsIncludingSubItems;
+            const aTags = a.tags;
+            const bTags = b.tags;
 
             // If no tags then assume they are equal.
             if (aTags.length === 0 && bTags.length === 0) {
@@ -137,7 +137,7 @@ export class TagsField extends MultiTextField {
 
     public grouper(): GrouperFunction {
         return (task: Task) => {
-            const tags = task.tagsIncludingSubItems;
+            const tags = task.tags;
             if (tags.length == 0) {
                 return ['(No tags)'];
             }

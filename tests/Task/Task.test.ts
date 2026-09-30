@@ -508,8 +508,9 @@ describe('tags in sub-items', () => {
     it('should include tags from an indented sub-item in the parent task', () => {
         const task = taskWithChildren('- [ ] Mytask #foobar', ['    - #quux']);
 
-        expect(task.tags).toEqual(['#foobar']);
-        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux']);
+        expect(task.tags).toEqual(['#foobar', '#quux']);
+        // The task's own line is unchanged:
+        expect(task.taskLineOnly.tags).toEqual(['#foobar']);
     });
 
     it('should include multiple tags from multiple sub-items', () => {
@@ -518,7 +519,7 @@ describe('tags in sub-items', () => {
             '    - another sub-item #grault',
         ]);
 
-        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux', '#corge', '#grault']);
+        expect(task.tags).toEqual(['#foobar', '#quux', '#corge', '#grault']);
     });
 
     it('should include tags from nested sub-items', () => {
@@ -526,20 +527,20 @@ describe('tags in sub-items', () => {
         const child = ListItem.fromListItemLine('    - sub-item #quux', task, task.taskLocation)!;
         createChildListItem('        - nested sub-item #corge', child);
 
-        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux', '#corge']);
+        expect(task.tags).toEqual(['#foobar', '#quux', '#corge']);
     });
 
     it('should not repeat a tag that is both on the task line and in a sub-item', () => {
         const task = taskWithChildren('- [ ] Mytask #foobar', ['    - #foobar', '    - #quux', '    - #quux']);
 
-        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux']);
+        expect(task.tags).toEqual(['#foobar', '#quux']);
     });
 
     it('should not change the tags of a task without sub-items', () => {
         const task = fromLine({ line: '- [ ] Mytask #foobar' });
 
-        expect(task.tagsIncludingSubItems).toEqual(['#foobar']);
-        expect(fromLine({ line: '- [ ] Mytask' }).tagsIncludingSubItems).toEqual([]);
+        expect(task.tags).toEqual(['#foobar']);
+        expect(fromLine({ line: '- [ ] Mytask' }).tags).toEqual([]);
     });
 
     it('should not include tags from a sub-item that is itself a task', () => {
@@ -547,8 +548,8 @@ describe('tags in sub-items', () => {
         const child = new Task({ ...fromLine({ line: '    - [ ] Child task #quux' }), parent });
         createChildListItem('        - #corge', child);
 
-        expect(parent.tagsIncludingSubItems).toEqual(['#foobar']);
-        expect(child.tagsIncludingSubItems).toEqual(['#quux', '#corge']);
+        expect(parent.tags).toEqual(['#foobar']);
+        expect(child.tags).toEqual(['#quux', '#corge']);
     });
 
     it('should not include tags from unrelated tasks and list items', () => {
@@ -557,7 +558,7 @@ describe('tags in sub-items', () => {
 
         const sibling = fromLine({ line: '- [ ] Sibling task #grault' });
 
-        expect(sibling.tagsIncludingSubItems).toEqual(['#grault']);
+        expect(sibling.tags).toEqual(['#grault']);
     });
 
     it('should not include the global filter from a sub-item', () => {
@@ -565,7 +566,123 @@ describe('tags in sub-items', () => {
 
         const task = taskWithChildren('- [ ] #task Mytask #foobar', ['    - #task #quux']);
 
-        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux']);
+        expect(task.tags).toEqual(['#foobar', '#quux']);
+    });
+});
+
+describe('task data in sub-items', () => {
+    function taskWithChildren(taskLine: string, childLines: string[]) {
+        const task = fromLine({ line: taskLine });
+        childLines.forEach((childLine) => createChildListItem(childLine, task));
+        return task;
+    }
+
+    it('should read a date from an indented sub-item', () => {
+        const task = taskWithChildren('- [ ] Mytask', ['    - ✅ 2023-04-17']);
+
+        expect(task.done.formatAsDate()).toEqual('2023-04-17');
+        expect(task.doneDate).toEqualMoment(moment('2023-04-17'));
+    });
+
+    it('should read all the date fields from indented sub-items', () => {
+        const task = taskWithChildren('- [ ] Mytask', [
+            '    - ➕ 2023-04-11 🛫 2023-04-12',
+            '    - ⏳ 2023-04-13 📅 2023-04-14',
+            '    - ❌ 2023-04-15 ✅ 2023-04-16',
+        ]);
+
+        expect(task.created.formatAsDate()).toEqual('2023-04-11');
+        expect(task.start.formatAsDate()).toEqual('2023-04-12');
+        expect(task.scheduled.formatAsDate()).toEqual('2023-04-13');
+        expect(task.due.formatAsDate()).toEqual('2023-04-14');
+        expect(task.cancelled.formatAsDate()).toEqual('2023-04-15');
+        expect(task.done.formatAsDate()).toEqual('2023-04-16');
+    });
+
+    it('should read priority, recurrence, on completion, id and depends on from indented sub-items', () => {
+        const task = taskWithChildren('- [ ] Mytask', ['    - ⏫ 🔁 every day', '    - 🏁 delete 🆔 abcdef ⛔ 123456']);
+
+        expect(task.priority).toEqual(Priority.High);
+        expect(task.recurrence?.toText()).toEqual('every day');
+        expect(task.onCompletion).toEqual(OnCompletion.Delete);
+        expect(task.id).toEqual('abcdef');
+        expect(task.dependsOn).toEqual(['123456']);
+    });
+
+    it('should combine the depends on values of the task line and its sub-items', () => {
+        const task = taskWithChildren('- [ ] Mytask ⛔ 123456', ['    - ⛔ abc123,123456']);
+
+        expect(task.dependsOn).toEqual(['123456', 'abc123']);
+    });
+
+    it('should read data from nested sub-items', () => {
+        const task = fromLine({ line: '- [ ] Mytask' });
+        const child = ListItem.fromListItemLine('    - sub-item', task, task.taskLocation)!;
+        createChildListItem('        - 📅 2023-04-14', child);
+
+        expect(task.due.formatAsDate()).toEqual('2023-04-14');
+    });
+
+    it('should prefer any value on the task line over the value in a sub-item', () => {
+        const task = taskWithChildren('- [ ] Mytask ⏫ 📅 2023-04-14', ['    - 🔽 📅 2023-12-31']);
+
+        expect(task.due.formatAsDate()).toEqual('2023-04-14');
+        expect(task.priority).toEqual(Priority.High);
+    });
+
+    it('should use the first sub-item that sets a value', () => {
+        const task = taskWithChildren('- [ ] Mytask', ['    - 📅 2023-04-14', '    - 📅 2023-12-31']);
+
+        expect(task.due.formatAsDate()).toEqual('2023-04-14');
+    });
+
+    it('should not read data from a sub-item that is itself a task', () => {
+        const parent = fromLine({ line: '- [ ] Parent task' });
+        const child = new Task({ ...fromLine({ line: '    - [ ] Child task 📅 2023-04-14' }), parent });
+        createChildListItem('        - ✅ 2023-04-17', child);
+
+        expect(parent.due.formatAsDate()).toEqual('');
+        expect(parent.done.formatAsDate()).toEqual('');
+        expect(child.due.formatAsDate()).toEqual('2023-04-14');
+        expect(child.done.formatAsDate()).toEqual('2023-04-17');
+    });
+
+    it('should not read data from unrelated tasks and list items', () => {
+        const task = fromLine({ line: '- [ ] Mytask' });
+        createChildListItem('    - 📅 2023-04-14', task);
+
+        const sibling = fromLine({ line: '- [ ] Sibling task' });
+
+        expect(sibling.due.formatAsDate()).toEqual('');
+    });
+
+    it('should not change the status of a task with a done date in a sub-item', () => {
+        const task = taskWithChildren('- [ ] Mytask', ['    - ✅ 2023-04-17']);
+
+        expect(task.status.symbol).toEqual(' ');
+    });
+
+    it('should use the sub-item data when calculating urgency', () => {
+        const withoutSubItems = fromLine({ line: '- [ ] Mytask' });
+        const withSubItems = taskWithChildren('- [ ] Mytask', ['    - ⏫']);
+
+        expect(withSubItems.urgency).toBeGreaterThan(withoutSubItems.urgency);
+    });
+
+    it('should not write the sub-item data to the task line', () => {
+        const task = taskWithChildren('- [ ] Mytask', ['    - ✅ 2023-04-17 ⏫']);
+
+        expect(task.toFileLineString()).toEqual('- [ ] Mytask');
+        expect(task.taskLineOnly.doneDate).toBeNull();
+        expect(task.taskLineOnly.priority).toEqual(Priority.None);
+    });
+
+    it('should not write the sub-item data to the task line when the task is toggled', () => {
+        jest.useFakeTimers().setSystemTime(new Date('2024-05-06'));
+
+        const task = taskWithChildren('- [ ] Mytask', ['    - 📅 2023-04-14']);
+
+        expect(toMarkdown(task.toggle())).toEqual('- [x] Mytask ✅ 2024-05-06');
     });
 });
 
