@@ -75,6 +75,19 @@ You can learn more in:
 - [[Obsidian Properties]], and the examples in that file
 - [Find tasks in notes with particular tag](https://github.com/obsidian-tasks-group/obsidian-tasks/blob/main/resources/sample_vaults/Tasks-Demo/How%20To/Find%20tasks%20in%20notes%20with%20particular%20tag.md).
 
+### Tags in sub-items
+
+Any tags on indented sub-items (plain list items) beneath a task are also treated as tags of that task.
+
+For example, the task below has both the `#foobar` and the `#quux` tags, so it is found by searches for either of them:
+
+```text
+- [ ] Mytask #foobar
+    - #quux
+```
+
+This applies to all task data, not just tags: see [[Getting Started#Adding data in sub-items]].
+
 ### Order of tags in task lines
 
 - Tags can go in any place in any order on the task.
@@ -115,7 +128,7 @@ If you do not find an existing item in Issues or Discussions, see [[About Suppor
 
 ## Related Tasks Block Instructions
 
-The following instructions use any tags on task lines.
+The following instructions use any tags on task lines, and any tags in the task's sub-items - see [[Tags#Tags in sub-items]].
 
 - `no tags`
 - `has tags`

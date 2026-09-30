@@ -152,6 +152,51 @@ export class ListItem {
     }
 
     /**
+     * Return any tags found in the description of this list item.
+     */
+    public get tagsInDescription(): string[] {
+        return ListItem.extractHashtags(this.description);
+    }
+
+    /**
+     * Return all the indented sub-items of this list item or task, in the order they appear in the file.
+     *
+     * Only descendants that are not tasks are returned: any child {@link Task} - and that task's
+     * own sub-items - describe the child task, and so are not sub-items of this object.
+     *
+     * These are the sub-items whose content is treated as belonging to this list item or task.
+     * See {@link Task.subItemsDetails}.
+     */
+    public get subItems(): ListItem[] {
+        const subItems: ListItem[] = [];
+
+        const addChildren = (listItem: ListItem) => {
+            for (const child of listItem.children) {
+                if (child.isTask) {
+                    continue;
+                }
+                subItems.push(child);
+                addChildren(child);
+            }
+        };
+
+        addChildren(this);
+
+        return subItems;
+    }
+
+    /**
+     * Returns an array of hashtags found in string
+     *
+     * @param description A task description that may contain hashtags
+     *
+     * @returns An array of hashTags found in the string
+     */
+    public static extractHashtags(description: string): string[] {
+        return description.match(TaskRegularExpressions.hashTags)?.map((tag) => tag.trim()) ?? [];
+    }
+
+    /**
      * Compare all the fields in another ListItem, to detect any differences from this one.
      *
      * If any field is different in any way, it will return false.

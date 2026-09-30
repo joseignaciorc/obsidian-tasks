@@ -11,6 +11,7 @@ import { TaskGroups } from '../../../src/Query/Group/TaskGroups';
 import { SearchInfo } from '../../../src/Query/SearchInfo';
 import { sortBy } from '../../TestingTools/SortingTestHelpers';
 import { Query } from '../../../src/Query/Query';
+import { createChildListItem } from '../../Task/ListItemHelpers';
 
 beforeEach(() => {
     GlobalFilter.getInstance().reset();
@@ -748,5 +749,36 @@ describe('grouping by tag', () => {
         const tasks = taskLines.map((taskLine) => fromLine({ line: taskLine }));
 
         expect({ grouper, tasks }).groupHeadingsToBe(['(No tags)', '#tag1', '#tag1/tag3', '#tag2', '#tag2/tag4']);
+    });
+});
+
+describe('tags in sub-items', () => {
+    function taskWithChildren(taskLine: string, childLines: string[]) {
+        const task = fromLine({ line: taskLine });
+        childLines.forEach((childLine) => createChildListItem(childLine, task));
+        return task;
+    }
+
+    it('should filter on tags in indented sub-items of the task', () => {
+        const task = taskWithChildren('- [ ] Mytask #foobar', ['    - #quux']);
+        const unrelatedTask = fromLine({ line: '- [ ] Sibling task #grault' });
+
+        expect(new TagsField().createFilterOrErrorMessage('tag includes #quux')).toMatchTask(task);
+        expect(new TagsField().createFilterOrErrorMessage('tag includes #foobar')).toMatchTask(task);
+        expect(new TagsField().createFilterOrErrorMessage('tag includes #quux')).not.toMatchTask(unrelatedTask);
+    });
+
+    it('should treat a task with tags only in sub-items as having tags', () => {
+        const task = taskWithChildren('- [ ] Mytask', ['    - #quux']);
+
+        expect(new TagsField().createFilterOrErrorMessage('has tags')).toMatchTask(task);
+        expect(new TagsField().createFilterOrErrorMessage('no tags')).not.toMatchTask(task);
+    });
+
+    it('should group by tags in indented sub-items of the task', () => {
+        const grouper = new TagsField().createNormalGrouper();
+        const tasks = [taskWithChildren('- [ ] Mytask #foobar', ['    - #quux'])];
+
+        expect({ grouper, tasks }).groupHeadingsToBe(['#foobar', '#quux']);
     });
 });

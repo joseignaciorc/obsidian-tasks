@@ -81,7 +81,11 @@ export class EditableTask {
      * @param task
      * @param allTasks
      */
-    public static fromTask(task: Task, allTasks: Task[]): EditableTask {
+    public static fromTask(originalTask: Task, allTasks: Task[]): EditableTask {
+        // Only the data on the task's own line is shown and edited: any data in the task's
+        // indented sub-items is left where the user wrote it.
+        const task = originalTask.taskLineOnly;
+
         const description = GlobalFilter.getInstance().removeAsWordFrom(task.description);
         // If we're displaying to the user the description without the global filter (i.e. it was removed in the method
         // above), or if the description did not include a global filter in the first place, we'll add the global filter

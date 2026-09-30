@@ -13,6 +13,7 @@ _In recent [Tasks releases](https://github.com/obsidian-tasks-group/obsidian-tas
 ## 8.x releases
 
 - X.Y.Z:
+  - Task data - such as tags, dates and priorities - can now be written on indented sub-items beneath a task. See [[Getting Started#Adding data in sub-items]].
   - **Documentation**
     - Add [[How to read the user guide off-line]].
 - 8.4.0:

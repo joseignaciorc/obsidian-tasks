@@ -54,6 +54,33 @@ This Tasks User Guide almost entirely uses Emoji to add data to your tasks.
 
 However, if you prefer to use text instead of Emoji, see [[About Task Formats]] for other options.
 
+### Adding data in sub-items
+
+Task data does not have to be written on the task line itself: it can also be written on
+indented sub-items (plain list items) beneath the task.
+
+For example, this task has the tag `#foobar`, the tag `#quux`, and the done date `2023-04-17`:
+
+```markdown
+- [ ] Mytask #foobar
+    - #quux
+    - ✅ 2023-04-17
+```
+
+- All the data that Tasks recognises on task lines is also recognised in sub-items:
+  tags, [[Dates|dates]], [[Priority|priorities]], [[Recurring Tasks|recurrence rules]],
+  [[On Completion|on completion]] actions and [[Task Dependencies|task dependencies]].
+- Sub-items of sub-items are searched too.
+- If a value is set both on the task line and in a sub-item, the value on the task line wins.
+  If several sub-items set the same value, the first one wins.
+- Data in any **child tasks** - and in those tasks' own sub-items - belongs to the child task,
+  and is not added to the parent task.
+- The status of a task is always taken from its own checkbox. A done date in a sub-item does
+  **not** mark the task as done.
+- Tasks never writes this data up on to the task line: when a task is edited or completed,
+  the sub-items are left exactly as you wrote them, and the
+  [[Create or edit Task|‘Create or edit Task’ Modal]] only shows the values on the task line.
+
 ## Easy editing of tasks
 
 A more convenient way to create a task is by using the `Tasks: Create or edit` command from the command palette.

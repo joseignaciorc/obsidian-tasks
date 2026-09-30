@@ -7,6 +7,7 @@ import { TasksDate } from '../DateTime/TasksDate';
 import { StatusType } from '../Statuses/StatusConfiguration';
 import { PriorityTools } from '../lib/PriorityTools';
 import { logging } from '../lib/logging';
+import type { TaskDetails } from '../TaskSerializer';
 import { logEndOfTaskEdit, logStartOfTaskEdit } from '../lib/LogTasksHelper';
 import { DateFallback } from '../DateTime/DateFallback';
 import { ListItem } from './ListItem';
@@ -14,7 +15,7 @@ import type { Occurrence } from './Occurrence';
 import { Urgency } from './Urgency';
 import type { Recurrence } from './Recurrence';
 import type { TaskLocation } from './TaskLocation';
-import type { Priority } from './Priority';
+import { Priority } from './Priority';
 import { TaskRegularExpressions } from './TaskRegularExpressions';
 import { OnCompletion, handleOnCompletion } from './OnCompletion';
 
@@ -43,9 +44,9 @@ export class Task extends ListItem {
     // NEW_TASK_FIELD_EDIT_REQUIRED
     public readonly status: Status;
 
-    public readonly tags: string[];
+    private readonly _tags: string[];
 
-    public readonly priority: Priority;
+    private readonly _priority: Priority;
 
     private readonly _createdDate: Moment | null;
     private readonly _startDate: Moment | null;
@@ -54,11 +55,11 @@ export class Task extends ListItem {
     private readonly _doneDate: Moment | null;
     private readonly _cancelledDate: Moment | null;
 
-    public readonly recurrence: Recurrence | null;
-    public readonly onCompletion: OnCompletion;
+    private readonly _recurrence: Recurrence | null;
+    private readonly _onCompletion: OnCompletion;
 
-    public readonly dependsOn: string[];
-    public readonly id: string;
+    private readonly _dependsOn: string[];
+    private readonly _id: string;
 
     /** The blockLink is a "^" annotation after the dates/recurrence rules.
      * Any non-empty value must begin with ' ^'. */
@@ -85,23 +86,23 @@ export class Task extends ListItem {
         taskLocation: TaskLocation;
         indentation: string;
         listMarker: string;
-        priority: Priority;
+        priority?: Priority;
         createdDate?: moment.Moment | null;
         startDate?: moment.Moment | null;
         scheduledDate?: moment.Moment | null;
         dueDate?: moment.Moment | null;
         doneDate?: moment.Moment | null;
         cancelledDate?: moment.Moment | null;
-        recurrence: Recurrence | null;
-        onCompletion: OnCompletion;
-        dependsOn: string[] | [];
-        id: string;
+        recurrence?: Recurrence | null;
+        onCompletion?: OnCompletion;
+        dependsOn?: string[] | [];
+        id?: string;
         blockLink: string;
-        tags: string[] | [];
+        tags?: string[] | [];
         originalMarkdown: string;
         scheduledDateIsInferred: boolean;
         parent?: ListItem | null;
-        [key: string]: any; // Allows access to spread private fields like _dueDate
+        [key: string]: any; // Allows access to spread private fields like _dueDate and _priority
     }) {
         const {
             status,
@@ -138,9 +139,9 @@ export class Task extends ListItem {
         // NEW_TASK_FIELD_EDIT_REQUIRED
         this.status = status;
 
-        this.tags = tags;
+        this._tags = Task.resolveValue(tags, args._tags, []);
 
-        this.priority = priority;
+        this._priority = Task.resolveValue(priority, args._priority, Priority.None);
 
         this._createdDate = this.resolveDate(createdDate, args._createdDate);
         this._startDate = this.resolveDate(startDate, args._startDate);
@@ -149,11 +150,11 @@ export class Task extends ListItem {
         this._doneDate = this.resolveDate(doneDate, args._doneDate);
         this._cancelledDate = this.resolveDate(cancelledDate, args._cancelledDate);
 
-        this.recurrence = recurrence;
-        this.onCompletion = onCompletion;
+        this._recurrence = Task.resolveValue(recurrence, args._recurrence, null);
+        this._onCompletion = Task.resolveValue(onCompletion, args._onCompletion, OnCompletion.Ignore);
 
-        this.dependsOn = dependsOn;
-        this.id = id;
+        this._dependsOn = Task.resolveValue(dependsOn, args._dependsOn, []);
+        this._id = Task.resolveValue(id, args._id, '');
 
         this.blockLink = blockLink;
 
@@ -176,11 +177,30 @@ export class Task extends ListItem {
      * @returns The resolved date value, or null if neither value exists
      */
     private resolveDate(paramValue: moment.Moment | null | undefined, recoveredValue: any): any {
+        return Task.resolveValue(paramValue, recoveredValue, null);
+    }
+
+    /**
+     * Resolve a field when spreading a Task object.
+     *
+     * When a Task is spread (`new Task({ ...task, ... })`), the values behind getters are not copied
+     * (getters aren't own properties), but the private field values are included in the spread object.
+     *
+     * This helper prioritizes explicitly passed parameters over recovered private field values:
+     * - If the parameter is explicitly provided (even null), use it
+     * - Otherwise, use the recovered private field value
+     * - If both are undefined, use the given default value
+     *
+     * @param paramValue - The parameter explicitly passed to the constructor
+     * @param recoveredValue - The private field value recovered from the spread object
+     * @param defaultValue - The value to use if neither of the other values is available
+     */
+    private static resolveValue<T>(paramValue: T | undefined, recoveredValue: unknown, defaultValue: T): T {
         const parameterSupplied = paramValue !== undefined;
         if (parameterSupplied) {
             return paramValue;
         } else {
-            return recoveredValue ?? null;
+            return (recoveredValue as T | null | undefined) ?? defaultValue;
         }
     }
 
@@ -315,7 +335,8 @@ export class Task extends ListItem {
      * @return {*}  {string}
      */
     public toString(): string {
-        return getUserSelectedTaskFormat().taskSerializer.serialize(this);
+        // Data in sub-items is intentionally not written to the task line:
+        return getUserSelectedTaskFormat().taskSerializer.serialize(this.taskLineOnly);
     }
 
     /**
@@ -651,6 +672,172 @@ export class Task extends ListItem {
         return PriorityTools.priorityNameUsingNormal(this.priority);
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // Data in indented sub-items
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Return the task data parsed from the text of each of this task's indented sub-items,
+     * in the order that the sub-items appear in the file.
+     *
+     * This allows task data to be written on indented plain list items beneath a task, for example:
+     *
+     * ```text
+     * - [ ] Mytask #foobar
+     *     - ✅ 2023-04-17
+     * ```
+     *
+     * Any values that are not set on the task line itself are then taken from the sub-items.
+     * The task line itself is never modified as a result of this.
+     *
+     * @see ListItem.subItems
+     * @see taskLineOnly
+     */
+    public get subItemsDetails(): TaskDetails[] {
+        const subItems = this.subItems;
+        if (subItems.length === 0) {
+            // Optimisation: the vast majority of tasks have no sub-items, so avoid all parsing for them.
+            return [];
+        }
+
+        const { taskSerializer } = getUserSelectedTaskFormat();
+        return subItems.map((subItem) => taskSerializer.deserialize(subItem.description));
+    }
+
+    /**
+     * Return a copy of this task that has no sub-items, and so only contains the data on its own line.
+     *
+     * This is used when writing the task back to file, so that data in sub-items is not
+     * copied up on to the task line, and when editing the task, so that the user only sees
+     * and edits the values on the task line.
+     *
+     * @see subItemsDetails
+     */
+    public get taskLineOnly(): Task {
+        if (this.subItems.length === 0) {
+            return this;
+        }
+
+        return new Task({ ...this, parent: null });
+    }
+
+    /**
+     * Return the first value of the given field that is set in any of this task's sub-items,
+     * or undefined if none of them set it.
+     */
+    private valueInSubItems<T>(readValue: (details: TaskDetails) => T, isSet: (value: T) => boolean): T | undefined {
+        for (const details of this.subItemsDetails) {
+            const value = readValue(details);
+            if (isSet(value)) {
+                return value;
+            }
+        }
+
+        return undefined;
+    }
+
+    private dateIncludingSubItems(
+        dateOnTaskLine: Moment | null,
+        readValue: (details: TaskDetails) => Moment | null,
+    ): Moment | null {
+        if (dateOnTaskLine !== null) {
+            return dateOnTaskLine.clone();
+        }
+
+        return this.valueInSubItems(readValue, (date) => date !== null)?.clone() ?? null;
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Values, including any data in indented sub-items
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Return the tags on the task line, and any tags in this task's sub-items.
+     *
+     * Duplicate tags are only returned once.
+     */
+    public get tags(): string[] {
+        const tags = [...this._tags];
+
+        for (const details of this.subItemsDetails) {
+            for (const tag of details.tags) {
+                // Remove the Global Filter if it is there, for consistency with the tags on the task line:
+                if (GlobalFilter.getInstance().equals(tag) || tags.includes(tag)) {
+                    continue;
+                }
+                tags.push(tag);
+            }
+        }
+
+        return tags;
+    }
+
+    public get priority(): Priority {
+        if (this._priority !== Priority.None) {
+            return this._priority;
+        }
+
+        return (
+            this.valueInSubItems(
+                (details) => details.priority,
+                (priority) => priority !== Priority.None,
+            ) ?? Priority.None
+        );
+    }
+
+    public get recurrence(): Recurrence | null {
+        if (this._recurrence !== null) {
+            return this._recurrence;
+        }
+
+        return (
+            this.valueInSubItems(
+                (details) => details.recurrence,
+                (recurrence) => recurrence !== null,
+            ) ?? null
+        );
+    }
+
+    public get onCompletion(): OnCompletion {
+        if (this._onCompletion !== OnCompletion.Ignore) {
+            return this._onCompletion;
+        }
+
+        return (
+            this.valueInSubItems(
+                (details) => details.onCompletion,
+                (onCompletion) => onCompletion !== OnCompletion.Ignore,
+            ) ?? OnCompletion.Ignore
+        );
+    }
+
+    public get id(): string {
+        if (this._id !== '') {
+            return this._id;
+        }
+
+        return (
+            this.valueInSubItems(
+                (details) => details.id,
+                (id) => id !== '',
+            ) ?? ''
+        );
+    }
+
+    public get dependsOn(): string[] {
+        const dependsOn = [...this._dependsOn];
+
+        for (const details of this.subItemsDetails) {
+            for (const id of details.dependsOn) {
+                if (!dependsOn.includes(id)) {
+                    dependsOn.push(id);
+                }
+            }
+        }
+
+        return dependsOn;
+    }
+
     public get urgency(): number {
         if (this._urgency === null) {
             this._urgency = Urgency.calculate(this);
@@ -660,7 +847,7 @@ export class Task extends ListItem {
     }
 
     public get cancelledDate(): Moment | null {
-        return this._cancelledDate?.clone() ?? null;
+        return this.dateIncludingSubItems(this._cancelledDate, (details) => details.cancelledDate);
     }
 
     /**
@@ -671,7 +858,7 @@ export class Task extends ListItem {
     }
 
     public get createdDate(): Moment | null {
-        return this._createdDate?.clone() ?? null;
+        return this.dateIncludingSubItems(this._createdDate, (details) => details.createdDate);
     }
 
     /**
@@ -682,7 +869,7 @@ export class Task extends ListItem {
     }
 
     public get doneDate(): Moment | null {
-        return this._doneDate?.clone() ?? null;
+        return this.dateIncludingSubItems(this._doneDate, (details) => details.doneDate);
     }
 
     /**
@@ -693,7 +880,7 @@ export class Task extends ListItem {
     }
 
     public get dueDate(): Moment | null {
-        return this._dueDate?.clone() ?? null;
+        return this.dateIncludingSubItems(this._dueDate, (details) => details.dueDate);
     }
 
     /**
@@ -704,7 +891,7 @@ export class Task extends ListItem {
     }
 
     public get scheduledDate(): Moment | null {
-        return this._scheduledDate?.clone() ?? null;
+        return this.dateIncludingSubItems(this._scheduledDate, (details) => details.scheduledDate);
     }
 
     /**
@@ -715,7 +902,7 @@ export class Task extends ListItem {
     }
 
     public get startDate(): Moment | null {
-        return this._startDate?.clone() ?? null;
+        return this.dateIncludingSubItems(this._startDate, (details) => details.startDate);
     }
 
     /**
@@ -908,17 +1095,6 @@ export class Task extends ListItem {
      */
     public static allDateFields(): (keyof Task)[] {
         return ['createdDate', 'startDate', 'scheduledDate', 'dueDate', 'doneDate', 'cancelledDate'];
-    }
-
-    /**
-     * Returns an array of hashtags found in string
-     *
-     * @param description A task description that may contain hashtags
-     *
-     * @returns An array of hashTags found in the string
-     */
-    public static extractHashtags(description: string): string[] {
-        return description.match(TaskRegularExpressions.hashTags)?.map((tag) => tag.trim()) ?? [];
     }
 }
 
