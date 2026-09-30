@@ -13,6 +13,7 @@ _In recent [Tasks releases](https://github.com/obsidian-tasks-group/obsidian-tas
 ## 8.x releases
 
 - X.Y.Z:
+  - Tags in indented sub-items of a task are now included in tag searches of that task. See [[Tags#Tags in sub-items]].
   - **Documentation**
     - Add [[How to read the user guide off-line]].
 - 8.4.0:

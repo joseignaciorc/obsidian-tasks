@@ -48,7 +48,8 @@ export class TagsField extends MultiTextField {
     }
 
     public values(task: Task): string[] {
-        return task.tags;
+        // Tags in any indented sub-items of the task are included, see Task.tagsIncludingSubItems.
+        return task.tagsIncludingSubItems;
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -95,13 +96,16 @@ export class TagsField extends MultiTextField {
 
     private static makeCompareByTagComparator(propertyInstance: number): Comparator {
         return (a: Task, b: Task) => {
+            const aTags = a.tagsIncludingSubItems;
+            const bTags = b.tagsIncludingSubItems;
+
             // If no tags then assume they are equal.
-            if (a.tags.length === 0 && b.tags.length === 0) {
+            if (aTags.length === 0 && bTags.length === 0) {
                 return 0;
-            } else if (a.tags.length === 0) {
+            } else if (aTags.length === 0) {
                 // a is less than b
                 return 1;
-            } else if (b.tags.length === 0) {
+            } else if (bTags.length === 0) {
                 // b is less than a
                 return -1;
             }
@@ -109,16 +113,16 @@ export class TagsField extends MultiTextField {
             // Arrays start at 0 but the users specify a tag starting at 1.
             const tagInstanceToSortBy = propertyInstance - 1;
 
-            if (a.tags.length < propertyInstance && b.tags.length >= propertyInstance) {
+            if (aTags.length < propertyInstance && bTags.length >= propertyInstance) {
                 return 1;
-            } else if (b.tags.length < propertyInstance && a.tags.length >= propertyInstance) {
+            } else if (bTags.length < propertyInstance && aTags.length >= propertyInstance) {
                 return -1;
-            } else if (a.tags.length < propertyInstance && b.tags.length < propertyInstance) {
+            } else if (aTags.length < propertyInstance && bTags.length < propertyInstance) {
                 return 0;
             }
 
-            const tagA = a.tags[tagInstanceToSortBy];
-            const tagB = b.tags[tagInstanceToSortBy];
+            const tagA = aTags[tagInstanceToSortBy];
+            const tagB = bTags[tagInstanceToSortBy];
             return tagA.localeCompare(tagB, undefined, { numeric: true });
         };
     }
@@ -133,10 +137,11 @@ export class TagsField extends MultiTextField {
 
     public grouper(): GrouperFunction {
         return (task: Task) => {
-            if (task.tags.length == 0) {
+            const tags = task.tagsIncludingSubItems;
+            if (tags.length == 0) {
                 return ['(No tags)'];
             }
-            return task.tags;
+            return tags;
         };
     }
 }

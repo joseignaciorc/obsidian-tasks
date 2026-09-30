@@ -911,14 +911,31 @@ export class Task extends ListItem {
     }
 
     /**
-     * Returns an array of hashtags found in string
+     * Return the tags on this task's line, together with any tags found in
+     * indented sub-items (plain list items) beneath this task.
      *
-     * @param description A task description that may contain hashtags
+     * Tags in any child tasks - and in their sub-items - are not included:
+     * they belong to those child tasks.
      *
-     * @returns An array of hashTags found in the string
+     * This is the value used by tag searches.
+     *
+     * @see tags
+     * @see ListItem.tagsInSubItems
      */
-    public static extractHashtags(description: string): string[] {
-        return description.match(TaskRegularExpressions.hashTags)?.map((tag) => tag.trim()) ?? [];
+    public get tagsIncludingSubItems(): string[] {
+        const tags = [...this.tags];
+
+        for (const tag of this.tagsInSubItems) {
+            // Remove the Global Filter if it is there, for consistency with the tags on the task line:
+            if (GlobalFilter.getInstance().equals(tag)) {
+                continue;
+            }
+            if (!tags.includes(tag)) {
+                tags.push(tag);
+            }
+        }
+
+        return tags;
     }
 }
 

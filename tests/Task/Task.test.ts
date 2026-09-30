@@ -19,6 +19,7 @@ import { booleanToEmoji } from '../TestingTools/FilterTestHelpers';
 import type { TasksDate } from '../../src/DateTime/TasksDate';
 import { OnCompletion } from '../../src/Task/OnCompletion';
 import { createTestTasksFile } from '../TestingTools/TasksFileHelpers';
+import { ListItem } from '../../src/Task/ListItem';
 import { createChildListItem } from './ListItemHelpers';
 
 window.moment = moment;
@@ -495,6 +496,77 @@ describe('parsing tags', () => {
             expect(task!.tags).toStrictEqual(extractedTags);
         },
     );
+});
+
+describe('tags in sub-items', () => {
+    function taskWithChildren(taskLine: string, childLines: string[]) {
+        const task = fromLine({ line: taskLine });
+        childLines.forEach((childLine) => createChildListItem(childLine, task));
+        return task;
+    }
+
+    it('should include tags from an indented sub-item in the parent task', () => {
+        const task = taskWithChildren('- [ ] Mytask #foobar', ['    - #quux']);
+
+        expect(task.tags).toEqual(['#foobar']);
+        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux']);
+    });
+
+    it('should include multiple tags from multiple sub-items', () => {
+        const task = taskWithChildren('- [ ] Mytask #foobar', [
+            '    - sub-item #quux #corge',
+            '    - another sub-item #grault',
+        ]);
+
+        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux', '#corge', '#grault']);
+    });
+
+    it('should include tags from nested sub-items', () => {
+        const task = fromLine({ line: '- [ ] Mytask #foobar' });
+        const child = ListItem.fromListItemLine('    - sub-item #quux', task, task.taskLocation)!;
+        createChildListItem('        - nested sub-item #corge', child);
+
+        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux', '#corge']);
+    });
+
+    it('should not repeat a tag that is both on the task line and in a sub-item', () => {
+        const task = taskWithChildren('- [ ] Mytask #foobar', ['    - #foobar', '    - #quux', '    - #quux']);
+
+        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux']);
+    });
+
+    it('should not change the tags of a task without sub-items', () => {
+        const task = fromLine({ line: '- [ ] Mytask #foobar' });
+
+        expect(task.tagsIncludingSubItems).toEqual(['#foobar']);
+        expect(fromLine({ line: '- [ ] Mytask' }).tagsIncludingSubItems).toEqual([]);
+    });
+
+    it('should not include tags from a sub-item that is itself a task', () => {
+        const parent = fromLine({ line: '- [ ] Parent task #foobar' });
+        const child = new Task({ ...fromLine({ line: '    - [ ] Child task #quux' }), parent });
+        createChildListItem('        - #corge', child);
+
+        expect(parent.tagsIncludingSubItems).toEqual(['#foobar']);
+        expect(child.tagsIncludingSubItems).toEqual(['#quux', '#corge']);
+    });
+
+    it('should not include tags from unrelated tasks and list items', () => {
+        const task = fromLine({ line: '- [ ] Mytask #foobar' });
+        createChildListItem('    - #quux', task);
+
+        const sibling = fromLine({ line: '- [ ] Sibling task #grault' });
+
+        expect(sibling.tagsIncludingSubItems).toEqual(['#grault']);
+    });
+
+    it('should not include the global filter from a sub-item', () => {
+        GlobalFilter.getInstance().set('#task');
+
+        const task = taskWithChildren('- [ ] #task Mytask #foobar', ['    - #task #quux']);
+
+        expect(task.tagsIncludingSubItems).toEqual(['#foobar', '#quux']);
+    });
 });
 
 describe('task parsing VS global filter', () => {

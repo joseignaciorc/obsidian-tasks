@@ -152,6 +152,54 @@ export class ListItem {
     }
 
     /**
+     * Return any tags found in the description of this list item.
+     */
+    public get tagsInDescription(): string[] {
+        return ListItem.extractHashtags(this.description);
+    }
+
+    /**
+     * Return any tags found in the descriptions of indented sub-items of this list item.
+     *
+     * Only sub-items that are not tasks are searched: the tags in any child {@link Task}
+     * (and in that task's own sub-items) belong to that child task instead.
+     *
+     * Duplicate tags are only returned once.
+     */
+    public get tagsInSubItems(): string[] {
+        const tags: string[] = [];
+
+        const addTagsInChildren = (listItem: ListItem) => {
+            for (const child of listItem.children) {
+                if (child.isTask) {
+                    continue;
+                }
+                for (const tag of child.tagsInDescription) {
+                    if (!tags.includes(tag)) {
+                        tags.push(tag);
+                    }
+                }
+                addTagsInChildren(child);
+            }
+        };
+
+        addTagsInChildren(this);
+
+        return tags;
+    }
+
+    /**
+     * Returns an array of hashtags found in string
+     *
+     * @param description A task description that may contain hashtags
+     *
+     * @returns An array of hashTags found in the string
+     */
+    public static extractHashtags(description: string): string[] {
+        return description.match(TaskRegularExpressions.hashTags)?.map((tag) => tag.trim()) ?? [];
+    }
+
+    /**
      * Compare all the fields in another ListItem, to detect any differences from this one.
      *
      * If any field is different in any way, it will return false.
